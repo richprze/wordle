@@ -4,32 +4,32 @@ import re
 import time
 import random
 from copy import deepcopy
-# from wordle import get_lists, check_guess, guess_wordle, guess_all_wordles, guess_openers, get_next_guess
 
 '''
-    To use, import functions from this file and run the following:
+To use, import functions from this file and run the following:
+from wordle import get_lists, check_guess, guess_wordle, guess_all_wordles, guess_openers, get_next_guess, get_second_guesses, guess_seconds
 
-    # Get the needed lists:
-    answers, allowed, allowed_freq = get_lists()
+# Get the needed lists:
+answers, allowed, allowed_freq = get_lists()
 
-    To solve a single wordle puzzle:
-        # Get a random answer to guess against
-        answer = answers[random.randrange(len(answers))]
-        # Guess wordle using an opener ('slate' in this case)
-        result = guess_wordle(allowed, answer, 'slate')
-        # Result returns num guesses it took to solve and state at each step
+To solve a single wordle puzzle:
+    # Get a random answer to guess against
+    answer = answers[random.randrange(len(answers))]
+    # Guess wordle using an opener ('slate' in this case)
+    result = guess_wordle(allowed, answer, 'slate')
+    # Result returns num guesses it took to solve and state at each step
 
-    To check how well an opener would perform (num of guesses to solve) against all possible answers:
-        # create a solutions dict to store results
-        # cnt of # puzzles solved in X guesses; 7 means could not solve puzzle; -1 means opener was not a valid answer
-        solutions = {-1: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6:[], 7:[]}
-        # Use opener to guess against all wordle answers
-        result = guess_all_wordles(answers, words, solutions, opener)
+To check how well an opener would perform (num of guesses to solve) against all possible answers:
+    # create a solutions dict to store results
+    # cnt of # puzzles solved in X guesses; 7 means could not solve puzzle; -1 means opener was not a valid answer
+    solutions = {-1: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6:[], 7:[]}
+    # Use opener to guess against all wordle answers
+    result = guess_all_wordles(answers, words, solutions, opener)
 
-    To check a list of possible openers against all possible answers:
-        # In this case list of openers is all allowable guesses
-        # guess_all_wordles function takes ~ 5 sec to run
-        results = guess_openers(allowed, answers, allowed)
+To check a list of possible openers against all possible answers:
+    # In this case list of openers is all allowable guesses
+    # guess_all_wordles function takes ~ 5 sec to run
+    results = guess_openers(allowed, answers, allowed)
 '''
 
 def get_lists():
@@ -109,7 +109,7 @@ def get_next_guess(guesses, rights, wrongs, regex):
 
     return None
 
-def guess_wordle(words, answer, first_guess='slate'):
+def guess_wordle(words, answer, first_guess='slate', second_guess=None):
     ''' Function to guess a single wordle answer 
         Algorithm is to guess the most frequently used word that matches criteria from previous guesses (see get_next_guess)
         Takes in a possible of guesses (words list), which is the same list of allowable guesses from wordle source code
@@ -123,6 +123,8 @@ def guess_wordle(words, answer, first_guess='slate'):
         # first guess
         if i == 0:
             g[i]['guess'] = first_guess
+        elif i == 1 and second_guess:
+            g[i]['guess'] = second_guess
         else:
             g[i]['guess'] = get_next_guess(words, rights, wrongs, g[i]['regex'])
 
@@ -150,7 +152,7 @@ def guess_wordle(words, answer, first_guess='slate'):
             g[i+1]['excludes'] = deepcopy(excludes)
 
 
-def guess_all_wordles(answers, words, solutions, first_guess='slate'):
+def guess_all_wordles(answers, words, solutions, first_guess='slate', second_guess=None):
     ''' function to loop through all wordle answers and use he guess_wordle function
         Records number of guesses it took
         Takes in an opener or defaults to using 'slae'
@@ -159,7 +161,7 @@ def guess_all_wordles(answers, words, solutions, first_guess='slate'):
     cnt = 1
     for answer in answers:
         print("starting wordle {} / {}".format(cnt, len(answers)), end='\r')
-        result = guess_wordle(words, answer, first_guess)
+        result = guess_wordle(words, answer, first_guess, second_guess)
         solutions[result['num']].append(result)
         cnt += 1
 
@@ -169,6 +171,40 @@ def guess_all_wordles(answers, words, solutions, first_guess='slate'):
     for k, v in solutions.items():
         print(k, len(v))
         results[k] = len(v)
+
+    return results
+
+def get_second_guesses(solutions):
+    results = []
+    for k in solutions:
+        print("on {}".format(k))
+        if k < 0 or k > 6:
+            print("breaking")
+            break
+        for s in solutions[k]:
+            result =['slate']
+            result.append(s['guesses'][k-1]['guess'])
+            result.append(k)
+            result.append(','.join(s['guesses'][k-1]['wrongs']))
+            result.append(','.join(s['guesses'][k-1]['rights']))
+            result.append(','.join(s['guesses'][k-1]['excludes'][0]))
+            result.append(','.join(s['guesses'][k-1]['excludes'][1]))
+            result.append(','.join(s['guesses'][k-1]['excludes'][2]))
+            result.append(','.join(s['guesses'][k-1]['excludes'][3]))
+            result.append(','.join(s['guesses'][k-1]['excludes'][4]))
+            results.append(result)
+
+    return results
+
+def guess_seconds(seconds, answers, words, opener='slate'):
+    results = []
+    cnt = 1
+    for second in seconds:
+        print("{} / {}".format(cnt, len(seconds)))
+        solutions = {-1: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6:[], 7:[]}
+        result = guess_all_wordles(answers, words, solutions, opener, second)
+        results.append({'opener': opener, 'second': second, 'results': result})
+        cnt += 1
 
     return results
 
@@ -187,6 +223,22 @@ def guess_openers(openers, answers, words):
         cnt += 1
 
     return results
+
+def save_opener_results(results, fn='results.csv'):
+    with open(fn, 'a') as f:
+        wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+        for res in results:
+            wr.writerow([res['opener'], res['results']['t'], (res['results'][1]+res['results'][2]*2+res['results'][3]*3+res['results'][4]*4+res['results'][5]*5+res['results'][6]*6)/(res['results'][1]+res['results'][2]+res['results'][3]+res['results'][4]+res['results'][5]+res['results'][6]), res['results'][1], res['results'][2], res['results'][3], res['results'][4], res['results'][5], res['results'][6], res['results'][7], res['results'][-1]])
+
+    return fn
+
+def save_seconds_results(results, fn='seconds.csv'):
+    with open(fn, 'a') as f:
+        wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+        for res in results:
+            wr.writerow([res['opener'], res['second'], res['results']['t'], (res['results'][1]+res['results'][2]*2+res['results'][3]*3+res['results'][4]*4+res['results'][5]*5+res['results'][6]*6)/(res['results'][1]+res['results'][2]+res['results'][3]+res['results'][4]+res['results'][5]+res['results'][6]), res['results'][1], res['results'][2], res['results'][3], res['results'][4], res['results'][5], res['results'][6], res['results'][7], res['results'][-1]])
+
+    return fn
 
 def get_wordle_answers(fn='wordle_answers.js'):
     with open(fn) as f:
